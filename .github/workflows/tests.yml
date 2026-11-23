@@ -1,0 +1,47 @@
+name: Check the tap
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tap-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # Public repository: a GitHub-hosted runner, and no secrets. Nothing here
+    # downloads a release archive, so no Nexus credential is needed.
+    runs-on: macos-15
+    timeout-minutes: 15
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+      HOMEBREW_NO_INSTALL_FROM_API: "1"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      # Use this checkout as the tap, as Homebrew's own tap CI does.
+      - name: Tap the checkout
+        run: |
+          set -euo pipefail
+          taps="$(brew --repository)/Library/Taps/sovnedge"
+          mkdir -p "$taps"
+          rm -rf "$taps/homebrew-harness-hub"
+          ln -s "$GITHUB_WORKSPACE" "$taps/homebrew-harness-hub"
+          brew trust sovnedge/harness-hub
+
+      - name: brew style
+        run: brew style sovnedge/harness-hub
+
+      - name: brew readall
+        run: brew readall --aliases --os=all --arch=all sovnedge/harness-hub
+
+      - name: brew audit
+        run: brew audit --strict --tap sovnedge/harness-hub
